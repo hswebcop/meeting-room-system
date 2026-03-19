@@ -449,9 +449,12 @@ function closeSidebar() {
 function changeWeek(d) { currentWeekStart.setDate(currentWeekStart.getDate() + d*7); renderCalendar(); }
 function goToday()     { currentWeekStart = getWeekStart(new Date()); renderCalendar(); }
 function toggleRoomFilter(r) {
-  const idx = activeRoomFilters.indexOf(r);
-  if (idx >= 0) { if (activeRoomFilters.length > 1) activeRoomFilters.splice(idx,1); }
-  else activeRoomFilters.push(r);
+  // 單選模式：點選哪個就只顯示那個；若已是唯一選中則全選恢復
+  if (activeRoomFilters.length === 1 && activeRoomFilters[0] === r) {
+    activeRoomFilters = [0, 1, 2]; // 再點一次已選的 → 恢復全選
+  } else {
+    activeRoomFilters = [r];       // 選單一會議室
+  }
   document.querySelectorAll('#roomFilter .room-badge').forEach(b => {
     b.classList.toggle('active', activeRoomFilters.includes(Number(b.dataset.room)));
   });
@@ -485,28 +488,82 @@ function renderCalendar() {
     const d  = new Date(ws); d.setDate(d.getDate()+i);
     const ds = formatDate(d);
     html += '<div class="cal-day-col">';
+
     for (let s=0;s<SLOT_COUNT;s++) {
       const isPast = ds < today || (ds === today && s < nowSlot);
       html += `<div class="cal-slot${isPast?' past':''}" onclick="calSlotClick('${ds}',${s},${isPast})"></div>`;
     }
+
     if (ds === today && nowSlot>=0 && nowSlot<SLOT_COUNT) {
       const topPx = nowSlot*40 + (new Date().getMinutes()%30)*(40/30);
       html += `<div class="now-line" style="top:${topPx}px"></div>`;
     }
-    allBookings.filter(b => b.date===ds && activeRoomFilters.includes(b.roomIdx)).forEach(b => {
-      const u = getUser(b.userId);
+
+    // 同一天的事件：計算重疊並分欄顯示
+    const dayEvts = allBookings.filter(b => b.date===ds && activeRoomFilters.includes(b.roomIdx));
+
+    // 為每個事件計算「欄位 index」和「總欄數」
+    // 策略：對每個事件，找出與它時間重疊的所有事件，分配不同欄
+    const columns = assignColumns(dayEvts);
+
+    dayEvts.forEach(b => {
+      const u    = getUser(b.userId);
+      const col  = columns[b.id];        // 此事件所在欄 (0-based)
+      const cols = col.total;            // 此事件所在群組的總欄數
+      const pct  = 100 / cols;
+      const left = col.index * pct;
+      const width = pct - 1;            // 留 1% 間距
+
       html += `<div class="cal-event ${ROOM_COLORS[b.roomIdx]}"
-        style="top:${b.startSlot*40}px;height:${(b.endSlot-b.startSlot)*40-3}px;"
+        style="top:${b.startSlot*40}px;height:${(b.endSlot-b.startSlot)*40-3}px;
+               left:${left}%;width:${width}%;"
         onclick="showEventDetail(${b.id});event.stopPropagation();"
-        title="${b.subject}&#10;${u?.name||b.userId}">
+        title="${b.subject}&#10;${u?.cname||u?.name||b.userId}">
         <div class="event-name">${b.subject}</div>
-        <div class="event-user">${u?.name||b.userId}</div>
+        <div class="event-user">${u?.cname||u?.name||b.userId}</div>
       </div>`;
     });
     html += '</div>';
   }
   html += '</div></div>';
   grid.innerHTML = html;
+}
+
+/** 計算事件群組與欄位，避免重疊遮蓋
+ *  回傳 { [bookingId]: { index, total } }
+ */
+function assignColumns(events) {
+  const result = {};
+  // 逐一處理，貪婪分配欄位
+  const cols = []; // cols[i] = 此欄目前最後結束的 slot
+
+  events.forEach(ev => {
+    // 找第一個可放的欄（結束時間 <= 本事件開始）
+    let placed = false;
+    for (let c = 0; c < cols.length; c++) {
+      if (cols[c] <= ev.startSlot) {
+        cols[c] = ev.endSlot;
+        result[ev.id] = { index: c, total: 0 }; // total 待補
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      cols.push(ev.endSlot);
+      result[ev.id] = { index: cols.length - 1, total: 0 };
+    }
+  });
+
+  // 補 total：對每個事件，找出與它有重疊的事件群組最大欄數
+  events.forEach(ev => {
+    const maxCol = events.reduce((max, other) => {
+      const overlap = !(ev.endSlot <= other.startSlot || ev.startSlot >= other.endSlot);
+      return overlap ? Math.max(max, result[other.id].index) : max;
+    }, 0);
+    result[ev.id].total = maxCol + 1;
+  });
+
+  return result;
 }
 
 function calSlotClick(date, slot, isPast) {
@@ -779,7 +836,9 @@ function renderAdminBookings() {
 function renderAdminUsers() {
   const tbody = document.getElementById('adminUsersTbody');
   tbody.innerHTML = allUsers.map(u=>`<tr>
-    <td class="mono">${u.id}</td><td>${u.name}</td>
+    <td class="mono">${u.id}</td>
+    <td>${u.cname||''}</td>
+    <td>${u.name}</td>
     <td><a href="mailto:${u.email}" style="color:var(--accent)">${u.email}</a></td>
     <td><span class="badge ${u.role==='admin'?'badge-admin':'badge-user'}">${u.role==='admin'?'管理員':'使用者'}</span></td>
     <td class="table-actions">
@@ -791,7 +850,7 @@ function openAddUserModal() {
   document.getElementById('userModalTitle').textContent = '👤 新增使用者';
   document.getElementById('userModalMode').value = 'add';
   document.getElementById('userModalOrigId').value = '';
-  ['umEmpId','umName','umEmail','umPassword'].forEach(id=>document.getElementById(id).value='');
+  ['umEmpId','umCname','umName','umEmail','umPassword'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('umEmpId').disabled = false;
   document.getElementById('umRole').value = 'user';
   document.getElementById('userModalError').classList.add('hidden');
@@ -802,17 +861,19 @@ function openEditUserModal(uid) {
   document.getElementById('userModalTitle').textContent = '✏️ 編輯使用者';
   document.getElementById('userModalMode').value = 'edit';
   document.getElementById('userModalOrigId').value = uid;
-  document.getElementById('umEmpId').value = u.id; document.getElementById('umEmpId').disabled = true;
-  document.getElementById('umName').value  = u.name;
-  document.getElementById('umEmail').value = u.email;
+  document.getElementById('umEmpId').value  = u.id;  document.getElementById('umEmpId').disabled = true;
+  document.getElementById('umCname').value  = u.cname || '';
+  document.getElementById('umName').value   = u.name;
+  document.getElementById('umEmail').value  = u.email;
   document.getElementById('umPassword').value = '';
-  document.getElementById('umRole').value  = u.role;
+  document.getElementById('umRole').value   = u.role;
   document.getElementById('userModalError').classList.add('hidden');
   document.getElementById('userModal').classList.remove('hidden');
 }
 async function saveUser() {
   const mode  = document.getElementById('userModalMode').value;
   const id    = document.getElementById('umEmpId').value.trim();
+  const cname = document.getElementById('umCname').value.trim();
   const name  = document.getElementById('umName').value.trim();
   const email = document.getElementById('umEmail').value.trim();
   const pwd   = document.getElementById('umPassword').value;
@@ -826,8 +887,8 @@ async function saveUser() {
   try {
     const action  = mode==='add'?'addUser':'updateUser';
     const payload = mode==='add'
-      ? { action, id, name, email, password:pwd, role }
-      : { action, id, name, email, role, ...(pwd?{password:pwd}:{}) };
+      ? { action, id, cname, name, email, password:pwd, role }
+      : { action, id, cname, name, email, role, ...(pwd?{password:pwd}:{}) };
     const res = await apiPost(payload);
     if (!res.success) { showAlert(errEl,res.message); return; }
     closeModal('userModal'); await refreshData();
@@ -849,14 +910,16 @@ async function confirmDeleteUser(uid) {
 ────────────────────────────────────────── */
 function loadProfile() {
   const u = currentUser;
-  document.getElementById('profileAvatar').textContent = initials(u.name);
+  document.getElementById('profileAvatar').textContent = initials(u.cname || u.name);
   document.getElementById('profileId').value    = u.id;
+  document.getElementById('profileCname').value = u.cname || '';
   document.getElementById('profileName').value  = u.name;
   document.getElementById('profileEmail').value = u.email;
   ['profileOldPwd','profileNewPwd','profileConfirmPwd'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('profileMsg').className='hidden';
 }
 async function saveProfile() {
+  const cname      = document.getElementById('profileCname').value.trim();
   const name       = document.getElementById('profileName').value.trim();
   const email      = document.getElementById('profileEmail').value.trim();
   const oldPwd     = document.getElementById('profileOldPwd').value;
@@ -864,7 +927,7 @@ async function saveProfile() {
   const confirmPwd = document.getElementById('profileConfirmPwd').value;
   const msgEl      = document.getElementById('profileMsg');
   if (!name||!email) { msgEl.className='alert alert-error'; msgEl.textContent='姓名和 Email 不能為空。'; return; }
-  const payload = { action:'updateUser', id:currentUser.id, name, email };
+  const payload = { action:'updateUser', id:currentUser.id, cname, name, email };
   if (oldPwd||newPwd||confirmPwd) {
     if (!oldPwd) { msgEl.className='alert alert-error'; msgEl.textContent='請輸入現有密碼。'; return; }
     if (!newPwd) { msgEl.className='alert alert-error'; msgEl.textContent='請輸入新密碼。'; return; }
@@ -878,9 +941,9 @@ async function saveProfile() {
   try {
     const res = await apiPost(payload);
     if (!res.success) { msgEl.className='alert alert-error'; msgEl.textContent=res.message; return; }
-    currentUser.name=name; currentUser.email=email;
+    currentUser.cname=cname; currentUser.name=name; currentUser.email=email;
     updateSidebarUser();
-    document.getElementById('profileAvatar').textContent = initials(name);
+    document.getElementById('profileAvatar').textContent = initials(cname || name);
     msgEl.className='alert alert-success'; msgEl.textContent='個人資料已成功更新！';
     ['profileOldPwd','profileNewPwd','profileConfirmPwd'].forEach(id=>document.getElementById(id).value='');
     await refreshData();
