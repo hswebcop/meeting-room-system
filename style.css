@@ -309,9 +309,13 @@ body {
 .time-range-group select option { background: var(--surface2); }
 
 .time-conflict-hint {
-  margin-top: 0.5rem; padding: 0.5rem 0.75rem;
-  background: rgba(255,92,92,0.1); border: 1px solid rgba(255,92,92,0.3);
-  border-radius: var(--radius-sm); font-size: 0.8rem; color: #ff9a9a;
+  margin-top: 0.6rem; padding: 0.65rem 0.85rem;
+  background: rgba(255,92,92,0.12);
+  border: 1px solid rgba(255,92,92,0.4);
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem; color: #ffaaaa;
+  line-height: 1.6;
 }
 
 .booked-list {

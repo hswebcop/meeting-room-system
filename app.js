@@ -665,7 +665,43 @@ function onStartTimeChange() {
   document.getElementById('bookEndTime').value='';
   document.getElementById('timeConflictHint').classList.add('hidden');
 }
-function onEndTimeChange() { document.getElementById('timeConflictHint').classList.add('hidden'); }
+function onEndTimeChange() {
+  const room     = document.getElementById('bookRoom').value;
+  const date     = document.getElementById('bookDate').value;
+  const startVal = document.getElementById('bookStartTime').value;
+  const endVal   = document.getElementById('bookEndTime').value;
+  const hintEl   = document.getElementById('timeConflictHint');
+
+  if (!room || !date || startVal === '' || endVal === '') {
+    hintEl.classList.add('hidden');
+    return;
+  }
+
+  const roomIdx   = parseInt(room);
+  const startSlot = parseInt(startVal);
+  const endSlot   = parseInt(endVal);
+  const conflicts = getConflicts(roomIdx, date, startSlot, endSlot);
+
+  if (conflicts.length > 0) {
+    hintEl.innerHTML = conflicts.map(c => {
+      const u = getUser(c.userId);
+      const name = u?.cname || u?.name || c.userId;
+      return `⚠️ <strong>${ROOMS[roomIdx]}</strong> 在 <strong>${slotToTime(c.startSlot)}–${slotToTime(c.endSlot)}</strong> 已由 <strong>${name}</strong> 預定「${c.subject}」`;
+    }).join('<br>');
+    hintEl.classList.remove('hidden');
+  } else {
+    hintEl.classList.add('hidden');
+  }
+}
+
+/* 取得指定會議室、日期、時段的所有衝突預定 */
+function getConflicts(roomIdx, date, startSlot, endSlot) {
+  return allBookings.filter(b =>
+    b.roomIdx === roomIdx &&
+    b.date    === date    &&
+    !(endSlot <= b.startSlot || startSlot >= b.endSlot)
+  );
+}
 
 function renderBookedList(roomIdx, date) {
   const el   = document.getElementById('bookedList');
@@ -676,10 +712,11 @@ function renderBookedList(roomIdx, date) {
   el.innerHTML = `<div class="booked-list-title">📌 當日已預定時段</div>` +
     list.map(b => {
       const u = getUser(b.userId);
+      const name = u?.cname || u?.name || b.userId;
       return `<div class="booked-item">
         <span class="booked-time">${slotToTime(b.startSlot)}–${slotToTime(b.endSlot)}</span>
         <span class="booked-subject">${b.subject}</span>
-        <span class="booked-user">${u?.name||b.userId}</span>
+        <span class="booked-user">${name}</span>
       </div>`;
     }).join('');
 }
@@ -719,13 +756,15 @@ async function submitBooking() {
   const startSlot = parseInt(startVal);
   const endSlot   = parseInt(endVal);
 
-  const conflict = allBookings.find(b =>
-    b.roomIdx===roomIdx && b.date===date &&
-    !(endSlot<=b.startSlot || startSlot>=b.endSlot)
-  );
-  if (conflict) {
-    const cu = getUser(conflict.userId);
-    showAlert(errEl, `⚠️ 時段衝突！${ROOMS[roomIdx]} ${slotToTime(conflict.startSlot)}–${slotToTime(conflict.endSlot)} 已由 ${cu?.name||conflict.userId} 預定「${conflict.subject}」，請另選時段。`);
+  // 前端即時衝突檢查
+  const conflicts = getConflicts(roomIdx, date, startSlot, endSlot);
+  if (conflicts.length > 0) {
+    const lines = conflicts.map(c => {
+      const cu   = getUser(c.userId);
+      const name = cu?.cname || cu?.name || c.userId;
+      return `• ${ROOMS[roomIdx]} ${slotToTime(c.startSlot)}–${slotToTime(c.endSlot)}　已由「${name}」預定：${c.subject}`;
+    }).join('<br>');
+    showAlert(errEl, `⚠️ 時段衝突，無法預定！<br><br>${lines}<br><br>請重新選擇其他時段或會議室。`);
     return;
   }
 
@@ -734,9 +773,13 @@ async function submitBooking() {
   try {
     const res = await apiPost({ action:'addBooking', userId, roomIdx, date, startSlot, endSlot, subject, desc });
     if (!res.success) {
-      showAlert(errEl, res.conflict
-        ? `⚠️ 時段衝突（伺服器）：${res.message}，請重新選擇。`
-        : (res.message||'預定失敗，請稍後再試。'));
+      if (res.conflict) {
+        // 伺服器二次驗證衝突（資料可能在填表期間被他人搶先預定）
+        showAlert(errEl, `⚠️ 預定失敗！此時段剛剛已被他人搶先預定。<br>（${res.message}）<br><br>請重新整理後另選時段。`);
+        await refreshData(); // 重新載入最新資料
+      } else {
+        showAlert(errEl, res.message || '預定失敗，請稍後再試。');
+      }
       return;
     }
     const user = getUser(userId);
