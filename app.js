@@ -164,16 +164,6 @@ async function loadPublicBookings() {
   }
 }
 
-function togglePubRoomFilter(r) {
-  const idx = pubRoomFilters.indexOf(r);
-  if (idx >= 0) { if (pubRoomFilters.length > 1) pubRoomFilters.splice(idx,1); }
-  else pubRoomFilters.push(r);
-  document.querySelectorAll('#pubRoomFilter .room-badge').forEach(b => {
-    b.classList.toggle('active', pubRoomFilters.includes(Number(b.dataset.room)));
-  });
-  renderMonthCal();
-}
-
 function changeMonth(delta) {
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
   renderMonthCal();
