@@ -8,9 +8,17 @@
 
 /* ──────────────────────────────────────────
    CONFIG & CONSTANTS
+   ★ 請將下方 HARDCODED_API_URL 換成您的
+     Google Apps Script 部署網址，
+     所有裝置（電腦、手機）都會自動使用，
+     不需要每台裝置個別設定。
 ────────────────────────────────────────── */
-const CONFIG_KEY  = 'meeting_system_api_url';
-let   API_URL     = localStorage.getItem(CONFIG_KEY) || '';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
+
+// localStorage 可覆寫（供管理員臨時切換環境用），
+// 否則直接用上方寫死的網址。
+const CONFIG_KEY = 'meeting_system_api_url';
+let API_URL = localStorage.getItem(CONFIG_KEY) || HARDCODED_API_URL;
 
 const ROOMS       = ['665 會議室', '663 訓練教室', '663 小會議室'];
 const ROOM_COLORS = ['r0', 'r1', 'r2'];
@@ -313,7 +321,10 @@ async function doLogin() {
   errEl.classList.add('hidden');
 
   if (!id || !pwd) { errEl.textContent = '請輸入員工代號和密碼。'; errEl.classList.remove('hidden'); return; }
-  if (!API_URL)    { errEl.innerHTML = '尚未設定後端 API，<a href="#" onclick="showSetupGuide()" style="color:var(--accent)">點此設定</a>'; errEl.classList.remove('hidden'); return; }
+  if (!API_URL || API_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    errEl.innerHTML = '尚未設定後端 API，<a href="#" onclick="showSetupGuide()" style="color:var(--accent)">點此設定</a>';
+    errEl.classList.remove('hidden'); return;
+  }
 
   btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true;
   try {
@@ -1221,14 +1232,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentMonth.setDate(1);
   updatePubLoginState();
 
-  // 用 addEventListener 綁定選單，比 HTML onchange attribute 更可靠
+  // 綁定選單事件
   const pubSel = document.getElementById('pubRoomSelect');
   if (pubSel) pubSel.addEventListener('change', onPubRoomSelect);
-
   const appSel = document.getElementById('appRoomSelect');
   if (appSel) appSel.addEventListener('change', onAppRoomSelect);
 
-  if (!API_URL) {
+  const notConfigured = !API_URL || API_URL === 'YOUR_APPS_SCRIPT_URL_HERE';
+  if (notConfigured) {
     document.getElementById('pubSetupNotice').classList.remove('hidden');
     renderMonthCal();
   } else {
