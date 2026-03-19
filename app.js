@@ -32,21 +32,49 @@ let currentMonth       = new Date(); // 公開月曆目前顯示月份
 let pendingAction      = null;       // 登入後要執行的動作
 
 /* ──────────────────────────────────────────
-   API CLIENT
-   全部走 GET，Apps Script 302 redirect，
-   fetch follow redirect 正常拿 JSON。
+   API CLIENT — JSONP
+   Apps Script Web App 會 302 redirect 到
+   script.googleusercontent.com，瀏覽器的
+   CORS 政策會擋住 fetch 的跨域 redirect。
+   解法：改用 JSONP（動態插入 <script> tag），
+   完全繞過 CORS 限制，Apps Script 原生支援。
 ────────────────────────────────────────── */
-async function apiCall(params) {
-  if (!API_URL) throw new Error('尚未設定 API 網址');
-  const url = new URL(API_URL);
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+let _jsonpCbIdx = 0;
+
+function apiCall(params) {
+  return new Promise((resolve, reject) => {
+    if (!API_URL) { reject(new Error('尚未設定 API 網址')); return; }
+
+    const cbName = `_gsCallback${++_jsonpCbIdx}`;
+    const timeout = setTimeout(() => {
+      delete window[cbName];
+      script.remove();
+      reject(new Error('連線逾時，請確認網址是否正確'));
+    }, 15000);
+
+    window[cbName] = (data) => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      script.remove();
+      resolve(data);
+    };
+
+    const url = new URL(API_URL);
+    url.searchParams.set('callback', cbName);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    });
+
+    const script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window[cbName];
+      script.remove();
+      reject(new Error('網路錯誤，無法連線至 Apps Script'));
+    };
+    document.head.appendChild(script);
   });
-  const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  try { return JSON.parse(text); }
-  catch { throw new Error('回應格式錯誤，請確認 Apps Script 部署設定。\n' + text.slice(0, 200)); }
 }
 const apiGet  = p => apiCall(p);
 const apiPost = d => apiCall(d);
