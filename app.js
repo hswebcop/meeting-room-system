@@ -965,9 +965,30 @@ async function saveEditBooking() {
       }
       return;
     }
+
+    // 發送會議變更通知 email
+    const booking = allBookings.find(x => x.id === id);
+    const user    = booking ? getUser(booking.userId) : null;
+    if (user?.email) {
+      try {
+        await apiPost({
+          action:    'sendEmail',
+          email:     user.email,
+          userName:  user.cname || user.name || user.id,
+          subject:   subject,
+          desc:      desc,
+          roomIdx:   roomIdx,
+          date:      date,
+          startTime: slotToTime(startSlot),
+          endTime:   slotToTime(endSlot),
+          isUpdate:  'true',
+        });
+      } catch { /* email 失敗不影響主流程 */ }
+    }
+
     closeModal('editModal');
     await refreshData();
-    showToast('會議已更新。');
+    showToast('會議已更新，通知已發送。');
   } catch(e) { showAlert(errEl,'更新失敗：'+e.message); }
   finally { btn.innerHTML='儲存變更'; btn.disabled=false; }
 }
