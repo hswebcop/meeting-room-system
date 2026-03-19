@@ -542,15 +542,16 @@ function renderCalendar() {
 
     dayEvts.forEach(b => {
       const u    = getUser(b.userId);
-      const col  = columns[b.id];        // 此事件所在欄 (0-based)
-      const cols = col.total;            // 此事件所在群組的總欄數
-      const pct  = 100 / cols;
-      const left = col.index * pct;
-      const width = pct - 1;            // 留 1% 間距
+      const col  = columns[b.id];
+      const cols = col.total;
+      const gap  = 1;                           // 欄間距 1%
+      const pct  = (100 - gap * (cols - 1)) / cols;
+      const left = col.index * (pct + gap);
+      const width = pct;
 
       html += `<div class="cal-event ${ROOM_COLORS[b.roomIdx]}"
         style="top:${b.startSlot*40}px;height:${(b.endSlot-b.startSlot)*40-3}px;
-               left:${left}%;width:${width}%;"
+               left:${left.toFixed(1)}%;width:${width.toFixed(1)}%;"
         onclick="showEventDetail(${b.id});event.stopPropagation();"
         title="${b.subject}&#10;${u?.cname||u?.name||b.userId}">
         <div class="event-name">${b.subject}</div>
@@ -1024,7 +1025,14 @@ document.addEventListener('keydown', e => {
 ────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   currentMonth.setDate(1);
-  updatePubLoginState(); // 頁面載入時同步登入狀態
+  updatePubLoginState();
+
+  // 用 addEventListener 綁定選單，比 HTML onchange attribute 更可靠
+  const pubSel = document.getElementById('pubRoomSelect');
+  if (pubSel) pubSel.addEventListener('change', onPubRoomSelect);
+
+  const appSel = document.getElementById('appRoomSelect');
+  if (appSel) appSel.addEventListener('change', onAppRoomSelect);
 
   if (!API_URL) {
     document.getElementById('pubSetupNotice').classList.remove('hidden');

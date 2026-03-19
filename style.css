@@ -263,7 +263,7 @@ body {
 .cal-slot.past { cursor: default; background: rgba(0,0,0,0.08); }
 .cal-slot.past:hover { background: rgba(0,0,0,0.08); }
 .cal-event {
-  position: absolute; left: 2px; right: 2px;
+  position: absolute;
   border-radius: 5px; padding: 3px 5px;
   font-size: 0.68rem; line-height: 1.35; overflow: hidden;
   cursor: pointer; z-index: 5; transition: filter 0.15s;
