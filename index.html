@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>會議室管理系統</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     PUBLIC HOME — 月曆總覽（不需登入）
+============================================================ -->
+<div id="publicScreen">
+
+  <!-- Top Header -->
+  <header class="pub-header">
+    <div class="pub-header-left">
+      <div class="pub-logo">🏢</div>
+      <div>
+        <div class="pub-title">會議室管理系統</div>
+        <div class="pub-subtitle">Room Booking System</div>
+      </div>
+    </div>
+    <div class="pub-header-right">
+      <div class="room-select-wrap">
+        <select id="pubRoomSelect" onchange="onPubRoomSelect()" class="room-select">
+          <option value="all">📋 所有會議室</option>
+          <option value="0">🔵 665 會議室</option>
+          <option value="1">🟣 663 訓練教室</option>
+          <option value="2">🟢 663 小會議室</option>
+        </select>
+      </div>
+      <button class="btn btn-primary pub-login-btn" onclick="requireLogin('book')">
+        ➕ 新增預定
+      </button>
+      <div id="pubUserBadge" class="pub-user-badge hidden">
+        <div class="pub-user-avatar" id="pubUserAvatar">U</div>
+        <span id="pubUserName">--</span>
+        <button class="btn btn-secondary btn-sm" onclick="enterApp()">進入系統</button>
+        <button class="btn btn-secondary btn-sm" onclick="confirmLogout()">登出</button>
+      </div>
+      <button class="btn btn-secondary pub-login-btn" onclick="requireLogin('login')" id="loginTriggerBtn">
+        🔐 登入
+      </button>
+    </div>
+  </header>
+
+  <!-- Month Navigation -->
+  <div class="pub-cal-nav">
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">‹</button>
+      <span class="month-label" id="monthLabel">--</span>
+      <button onclick="changeMonth(1)">›</button>
+      <button class="today-btn" onclick="goThisMonth()">本月</button>
+    </div>
+    <div id="pubLoadingBar" class="loading-bar hidden"></div>
+    <div class="pub-legend">
+      <span class="legend-item"><span class="legend-dot r0"></span>665 會議室</span>
+      <span class="legend-item"><span class="legend-dot r1"></span>663 訓練教室</span>
+      <span class="legend-item"><span class="legend-dot r2"></span>663 小會議室</span>
+    </div>
+  </div>
+
+  <!-- Monthly Calendar Grid -->
+  <div class="pub-cal-wrap">
+    <div class="month-cal" id="monthCal"></div>
+  </div>
+
+  <!-- Setup notice (if no API configured) -->
+  <div id="pubSetupNotice" class="pub-setup-notice hidden">
+    ⚙️ 尚未設定後端 API —
+    <a href="#" onclick="showSetupGuide()" style="color:var(--accent)">點此完成設定</a>
+  </div>
+</div>
+
+<!-- ============================================================
+     SETUP GUIDE MODAL
+============================================================ -->
+<div class="modal-overlay hidden" id="setupModal">
+  <div class="modal" style="max-width:580px;">
+    <div class="modal-header">
+      <h3>⚙️ 系統設定指南</h3>
+      <button class="modal-close" onclick="closeModal('setupModal')">✕</button>
+    </div>
+    <div class="modal-body" style="font-size:0.88rem;line-height:1.8;">
+      <div class="setup-step"><div class="step-num">1</div><div>
+        <strong>建立 Google Sheet</strong><br>
+        前往 <a href="https://sheets.google.com" target="_blank" style="color:var(--accent)">Google Sheets</a> 新增試算表，複製網址中的 ID（<code>/d/<strong>YOUR_ID</strong>/edit</code>）
+      </div></div>
+      <div class="setup-step"><div class="step-num">2</div><div>
+        <strong>建立 Google Apps Script</strong><br>
+        在試算表中點選「擴充功能」→「Apps Script」，貼上 <code>Code.gs</code> 的內容，將 <code>SPREADSHEET_ID</code> 換成您的 Sheet ID。
+      </div></div>
+      <div class="setup-step"><div class="step-num">3</div><div>
+        <strong>執行 setup() 初始化</strong><br>
+        在 Apps Script 中選取 <code>setup</code> 函式並執行，授予試算表與 Gmail 權限。
+      </div></div>
+      <div class="setup-step"><div class="step-num">4</div><div>
+        <strong>部署為 Web App</strong><br>
+        點選「部署」→「新增部署」，類型選「Web 應用程式」，執行身分選「我」，存取層級選「任何人」，複製部署網址。
+      </div></div>
+      <div class="setup-step"><div class="step-num">5</div><div>
+        <strong>填入 API 網址</strong><br>將部署網址貼到下方，儲存後即可使用系統。
+      </div></div>
+      <div class="form-group" style="margin-top:1rem;">
+        <label>Google Apps Script 部署網址</label>
+        <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/YOUR_ID/exec" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('setupModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveApiUrl()">儲存並測試連線</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     LOGIN MODAL（點擊新增/登入才出現）
+============================================================ -->
+<div class="modal-overlay hidden" id="loginModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <h3>🔐 登入系統</h3>
+      <button class="modal-close" onclick="closeModal('loginModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-tabs" style="margin-bottom:1.2rem;">
+        <div class="auth-tab active" onclick="switchAuthTab('login')">員工登入</div>
+        <div class="auth-tab" onclick="switchAuthTab('admin')">管理員登入</div>
+      </div>
+      <div class="form-group">
+        <label>員工代號</label>
+        <input type="text" id="loginId" placeholder="請輸入員工代號" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" id="loginPwd" placeholder="請輸入密碼" autocomplete="current-password" />
+      </div>
+      <div id="loginError" class="alert alert-error hidden"></div>
+      <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">
+        <span id="loginBtnText">登入</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     EVENT DETAIL MODAL（公開可查看）
+============================================================ -->
+<div class="modal-overlay hidden" id="pubEventModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📅 會議詳情</h3>
+      <button class="modal-close" onclick="closeModal('pubEventModal')">✕</button>
+    </div>
+    <div class="modal-body" id="pubEventModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('pubEventModal')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP（登入後才顯示）
+============================================================ -->
+<div id="appScreen" class="app hidden">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-icon">🏢</div>
+        <span>會議室系統</span>
+      </div>
+      <div class="user-badge">
+        <div class="user-avatar" id="userAvatarSidebar">U</div>
+        <div class="user-info">
+          <div class="name" id="userNameSidebar">--</div>
+          <div class="role" id="userRoleSidebar">--</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">主選單</div>
+        <div class="nav-item" onclick="showPage('calendar')" data-page="calendar"><span class="nav-icon">📅</span>行事曆總覽</div>
+        <div class="nav-item" onclick="showPage('book')" data-page="book"><span class="nav-icon">➕</span>預定會議室</div>
+        <div class="nav-item" onclick="showPage('mybookings')" data-page="mybookings"><span class="nav-icon">📋</span>我的會議</div>
+      </div>
+      <div class="nav-section" id="adminNav" style="display:none;">
+        <div class="nav-section-title">管理員</div>
+        <div class="nav-item" onclick="showPage('adminBookings')" data-page="adminBookings"><span class="nav-icon">🗂️</span>所有會議管理</div>
+        <div class="nav-item" onclick="showPage('adminUsers')" data-page="adminUsers"><span class="nav-icon">👥</span>使用者管理</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">帳號</div>
+        <div class="nav-item" onclick="showPage('profile')" data-page="profile"><span class="nav-icon">👤</span>個人資料</div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="nav-item" onclick="doLogout()"><span class="nav-icon">🏠</span>回首頁</div>
+      <div class="nav-item" onclick="confirmLogout()"><span class="nav-icon">🚪</span>登出</div>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="topbar">
+      <button class="hamburger" onclick="toggleSidebar()">☰</button>
+      <div class="topbar-title" id="topbarTitle">行事曆總覽</div>
+      <button class="btn btn-secondary btn-sm" onclick="refreshData()" id="refreshBtn" title="重新整理">↻</button>
+    </div>
+
+    <div class="page-content">
+
+      <!-- Weekly Calendar -->
+      <div class="page active" id="page-calendar">
+        <div class="calendar-controls">
+          <div class="week-nav">
+            <button onclick="changeWeek(-1)">‹</button>
+            <span class="week-label" id="weekLabel">--</span>
+            <button onclick="changeWeek(1)">›</button>
+            <button onclick="goToday()" class="today-btn">今天</button>
+          </div>
+          <div class="room-select-wrap">
+            <select id="appRoomSelect" onchange="onAppRoomSelect()" class="room-select">
+              <option value="all">📋 所有會議室</option>
+              <option value="0">🔵 665 會議室</option>
+              <option value="1">🟣 663 訓練教室</option>
+              <option value="2">🟢 663 小會議室</option>
+            </select>
+          </div>
+        </div>
+        <div id="calLoading" class="loading-bar hidden"></div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </div>
+
+      <!-- Book -->
+      <div class="page" id="page-book">
+        <div style="max-width:560px;">
+          <div class="profile-card">
+            <h3 style="margin-bottom:1.2rem;font-size:1rem;">📋 預定會議室</h3>
+            <div class="form-group">
+              <label>預定人</label>
+              <select id="bookUser"></select>
+            </div>
+            <div class="form-group">
+              <label>會議室</label>
+              <select id="bookRoom" onchange="updateAvailableSlots()">
+                <option value="">-- 選擇會議室 --</option>
+                <option value="0">665 會議室</option>
+                <option value="1">663 訓練教室</option>
+                <option value="2">663 小會議室</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>會議日期</label>
+              <input type="date" id="bookDate" onchange="updateAvailableSlots()" />
+            </div>
+            <div class="form-group" id="slotSection" style="display:none;">
+              <label>會議時間</label>
+              <div class="time-range-row">
+                <div class="time-range-group">
+                  <span class="time-range-label">開始</span>
+                  <select id="bookStartTime" onchange="onStartTimeChange()"></select>
+                </div>
+                <div class="time-range-sep">—</div>
+                <div class="time-range-group">
+                  <span class="time-range-label">結束</span>
+                  <select id="bookEndTime" onchange="onEndTimeChange()"></select>
+                </div>
+              </div>
+              <div id="timeConflictHint" class="time-conflict-hint hidden"></div>
+              <div id="bookedList" class="booked-list hidden"></div>
+            </div>
+            <div class="form-group">
+              <label>會議主旨 <span class="required">*</span></label>
+              <input type="text" id="bookSubject" placeholder="請輸入會議主旨" />
+            </div>
+            <div class="form-group">
+              <label>會議說明</label>
+              <textarea id="bookDesc" rows="3" placeholder="請輸入會議說明（可選）"></textarea>
+            </div>
+            <div id="bookError" class="alert alert-error hidden"></div>
+            <div id="bookSuccess" class="alert alert-success hidden"></div>
+            <div style="display:flex;gap:0.6rem;">
+              <button class="btn btn-primary" onclick="submitBooking()" id="bookSubmitBtn">確認預定</button>
+              <button class="btn btn-secondary" onclick="resetBookForm()">清除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Bookings -->
+      <div class="page" id="page-mybookings">
+        <div id="myBookingsList" class="bookings-list"></div>
+      </div>
+
+      <!-- Admin Bookings -->
+      <div class="page" id="page-adminBookings">
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>日期</th><th>時間</th><th>會議室</th><th>主旨</th><th>預定人</th><th>操作</th></tr></thead>
+            <tbody id="adminBookingsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Admin Users -->
+      <div class="page" id="page-adminUsers">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
+          <button class="btn btn-success" onclick="openAddUserModal()">＋ 新增使用者</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>員工代號</th><th>中文姓名</th><th>顯示名稱</th><th>Email</th><th>角色</th><th>操作</th></tr></thead>
+            <tbody id="adminUsersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Profile -->
+      <div class="page" id="page-profile">
+        <div style="max-width:480px;">
+          <div class="profile-card">
+            <div class="profile-avatar" id="profileAvatar">U</div>
+            <h3 style="margin-bottom:1.2rem;font-size:1rem;">👤 個人資料</h3>
+            <div class="form-group"><label>員工代號</label><input type="text" id="profileId" readonly style="opacity:0.6;" /></div>
+            <div class="form-group"><label>中文姓名</label><input type="text" id="profileCname" placeholder="請輸入中文姓名" /></div>
+            <div class="form-group"><label>英文／帳號顯示名稱</label><input type="text" id="profileName" /></div>
+            <div class="form-group"><label>Email</label><input type="email" id="profileEmail" /></div>
+            <hr class="divider">
+            <h4 style="font-size:0.9rem;margin-bottom:0.8rem;color:var(--text2);">更改密碼</h4>
+            <div class="form-group"><label>現有密碼</label><input type="password" id="profileOldPwd" /></div>
+            <div class="form-group"><label>新密碼</label><input type="password" id="profileNewPwd" /></div>
+            <div class="form-group"><label>確認新密碼</label><input type="password" id="profileConfirmPwd" /></div>
+            <div id="profileMsg" class="hidden"></div>
+            <button class="btn btn-primary" onclick="saveProfile()">儲存變更</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── App Modals ── -->
+<div class="modal-overlay hidden" id="eventModal">
+  <div class="modal">
+    <div class="modal-header"><h3>📅 會議詳情</h3><button class="modal-close" onclick="closeModal('eventModal')">✕</button></div>
+    <div class="modal-body" id="eventModalBody"></div>
+    <div class="modal-footer" id="eventModalFooter"></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="editModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header"><h3>✏️ 編輯會議</h3><button class="modal-close" onclick="closeModal('editModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="editBookingId" />
+      <div class="form-group">
+        <label>會議室</label>
+        <select id="editRoom" onchange="onEditRoomOrDateChange()">
+          <option value="0">665 會議室</option>
+          <option value="1">663 訓練教室</option>
+          <option value="2">663 小會議室</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>會議日期</label>
+        <input type="date" id="editDate" onchange="onEditRoomOrDateChange()" />
+      </div>
+      <div class="form-group">
+        <label>會議時間</label>
+        <div class="time-range-row">
+          <div class="time-range-group">
+            <span class="time-range-label">開始</span>
+            <select id="editStartTime" onchange="onEditStartTimeChange()"></select>
+          </div>
+          <div class="time-range-sep">—</div>
+          <div class="time-range-group">
+            <span class="time-range-label">結束</span>
+            <select id="editEndTime" onchange="onEditEndTimeChange()"></select>
+          </div>
+        </div>
+        <div id="editConflictHint" class="time-conflict-hint hidden"></div>
+      </div>
+      <div class="form-group"><label>會議主旨 <span class="required">*</span></label><input type="text" id="editSubject" /></div>
+      <div class="form-group"><label>會議說明</label><textarea id="editDesc" rows="3"></textarea></div>
+      <div id="editError" class="alert alert-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('editModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveEditBooking()" id="editSaveBtn">儲存變更</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="userModal">
+  <div class="modal">
+    <div class="modal-header"><h3 id="userModalTitle">👤 新增使用者</h3><button class="modal-close" onclick="closeModal('userModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="userModalMode" />
+      <input type="hidden" id="userModalOrigId" />
+      <div class="form-group"><label>員工代號 <span class="required">*</span></label><input type="text" id="umEmpId" /></div>
+      <div class="form-group"><label>中文姓名</label><input type="text" id="umCname" placeholder="請輸入中文姓名" /></div>
+      <div class="form-group"><label>顯示名稱 <span class="required">*</span></label><input type="text" id="umName" placeholder="英文或其他顯示名稱" /></div>
+      <div class="form-group"><label>Email <span class="required">*</span></label><input type="email" id="umEmail" /></div>
+      <div class="form-group" id="umPwdGroup"><label>密碼</label><input type="password" id="umPassword" /></div>
+      <div class="form-group"><label>角色</label>
+        <select id="umRole"><option value="user">一般使用者</option><option value="admin">管理員</option></select>
+      </div>
+      <div id="userModalError" class="alert alert-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('userModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveUser()" id="saveUserBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="app.js"></script>
+</body>
+</html>
