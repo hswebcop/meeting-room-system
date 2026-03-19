@@ -131,8 +131,15 @@ async function saveApiUrl() {
 }
 
 /* ──────────────────────────────────────────
-   PUBLIC PAGE — 月曆
+   PUBLIC PAGE — 月曆 & 會議室下拉選單
 ────────────────────────────────────────── */
+function onPubRoomSelect() {
+  const val = document.getElementById('pubRoomSelect').value;
+  pubRoomFilters = val === 'all' ? [0,1,2] : [Number(val)];
+  renderMonthCal();
+}
+
+function togglePubRoomFilter() {} // 保留空函式以防舊引用
 async function loadPublicBookings() {
   if (!API_URL) return;
   document.getElementById('pubLoadingBar').classList.remove('hidden');
@@ -333,6 +340,7 @@ async function doLogin() {
     }
     currentUser = result.user;
     closeModal('loginModal');
+    updatePubLoginState(); // 更新首頁 header 登入狀態
     // Switch to app screen
     document.getElementById('publicScreen').classList.add('hidden');
     document.getElementById('appScreen').classList.remove('hidden');
@@ -398,16 +406,57 @@ async function refreshData() {
 }
 
 function updateSidebarUser() {
-  document.getElementById('userAvatarSidebar').textContent = initials(currentUser.name);
-  document.getElementById('userNameSidebar').textContent   = currentUser.name;
+  const display = currentUser.cname || currentUser.name;
+  document.getElementById('userAvatarSidebar').textContent = initials(display);
+  document.getElementById('userNameSidebar').textContent   = display;
   document.getElementById('userRoleSidebar').textContent   = currentUser.role === 'admin' ? '系統管理員' : '一般使用者';
 }
+
+/* 更新首頁 header 的登入狀態 */
+function updatePubLoginState() {
+  const loggedIn = !!currentUser;
+  document.getElementById('loginTriggerBtn').classList.toggle('hidden', loggedIn);
+  document.getElementById('pubUserBadge').classList.toggle('hidden', !loggedIn);
+  if (loggedIn) {
+    const display = currentUser.cname || currentUser.name;
+    document.getElementById('pubUserAvatar').textContent = initials(display);
+    document.getElementById('pubUserName').textContent   = display;
+  }
+}
+
+/* 從首頁進入個人系統 */
+function enterApp() {
+  if (!currentUser) { requireLogin('login'); return; }
+  document.getElementById('publicScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  showPage('calendar');
+}
+
+/* 真正登出（清除登入狀態） */
+function confirmLogout() {
+  if (!confirm('確定要登出？')) return;
+  currentUser = null; allUsers = []; allBookings = [];
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('publicScreen').classList.remove('hidden');
+  updatePubLoginState();
+  loadPublicBookings();
+}
+
+/* 側邊欄「回首頁」—— 保持登入，僅切換畫面 */
+function doLogout() {
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('publicScreen').classList.remove('hidden');
+  updatePubLoginState();
+  loadPublicBookings();
+}
+
 function populateBookingUserSelect() {
   const sel = document.getElementById('bookUser');
   const val = sel.value;
   sel.innerHTML = '<option value="">-- 選擇預定人 --</option>';
   allUsers.filter(u => u.role !== 'admin').forEach(u => {
-    sel.innerHTML += `<option value="${u.id}">${u.name} (${u.id})</option>`;
+    const display = u.cname ? `${u.cname} (${u.id})` : `${u.name} (${u.id})`;
+    sel.innerHTML += `<option value="${u.id}">${display}</option>`;
   });
   if (currentUser.role !== 'admin') { sel.value = currentUser.id; sel.disabled = true; }
   else { sel.disabled = false; sel.value = val || ''; }
@@ -448,18 +497,13 @@ function closeSidebar() {
 ────────────────────────────────────────── */
 function changeWeek(d) { currentWeekStart.setDate(currentWeekStart.getDate() + d*7); renderCalendar(); }
 function goToday()     { currentWeekStart = getWeekStart(new Date()); renderCalendar(); }
-function toggleRoomFilter(r) {
-  // 單選模式：點選哪個就只顯示那個；若已是唯一選中則全選恢復
-  if (activeRoomFilters.length === 1 && activeRoomFilters[0] === r) {
-    activeRoomFilters = [0, 1, 2]; // 再點一次已選的 → 恢復全選
-  } else {
-    activeRoomFilters = [r];       // 選單一會議室
-  }
-  document.querySelectorAll('#roomFilter .room-badge').forEach(b => {
-    b.classList.toggle('active', activeRoomFilters.includes(Number(b.dataset.room)));
-  });
+function onAppRoomSelect() {
+  const val = document.getElementById('appRoomSelect').value;
+  activeRoomFilters = val === 'all' ? [0,1,2] : [Number(val)];
   renderCalendar();
 }
+
+function toggleRoomFilter() {} // 保留空函式以防舊引用
 
 function renderCalendar() {
   const ws  = new Date(currentWeekStart);
@@ -909,6 +953,13 @@ async function confirmDeleteUser(uid) {
    PROFILE
 ────────────────────────────────────────── */
 function loadProfile() {
+  // 從 allUsers 取最新資料（包含手動在 Sheet 新增的 cname）
+  const fresh = allUsers.find(u => u.id === currentUser.id);
+  if (fresh) {
+    currentUser.cname = fresh.cname || '';
+    currentUser.name  = fresh.name;
+    currentUser.email = fresh.email;
+  }
   const u = currentUser;
   document.getElementById('profileAvatar').textContent = initials(u.cname || u.name);
   document.getElementById('profileId').value    = u.id;
@@ -983,10 +1034,11 @@ document.addEventListener('keydown', e => {
 ────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   currentMonth.setDate(1);
+  updatePubLoginState(); // 頁面載入時同步登入狀態
 
   if (!API_URL) {
     document.getElementById('pubSetupNotice').classList.remove('hidden');
-    renderMonthCal(); // 渲染空月曆
+    renderMonthCal();
   } else {
     document.getElementById('pubSetupNotice').classList.add('hidden');
     await loadPublicBookings();

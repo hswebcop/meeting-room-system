@@ -24,14 +24,23 @@
       </div>
     </div>
     <div class="pub-header-right">
-      <div class="room-filter" id="pubRoomFilter">
-        <div class="room-badge r0 active" data-room="0" onclick="togglePubRoomFilter(0)">665 會議室</div>
-        <div class="room-badge r1 active" data-room="1" onclick="togglePubRoomFilter(1)">663 訓練教室</div>
-        <div class="room-badge r2 active" data-room="2" onclick="togglePubRoomFilter(2)">663 小會議室</div>
+      <div class="room-select-wrap">
+        <select id="pubRoomSelect" onchange="onPubRoomSelect()" class="room-select">
+          <option value="all">📋 所有會議室</option>
+          <option value="0">🔵 665 會議室</option>
+          <option value="1">🟣 663 訓練教室</option>
+          <option value="2">🟢 663 小會議室</option>
+        </select>
       </div>
       <button class="btn btn-primary pub-login-btn" onclick="requireLogin('book')">
         ➕ 新增預定
       </button>
+      <div id="pubUserBadge" class="pub-user-badge hidden">
+        <div class="pub-user-avatar" id="pubUserAvatar">U</div>
+        <span id="pubUserName">--</span>
+        <button class="btn btn-secondary btn-sm" onclick="enterApp()">進入系統</button>
+        <button class="btn btn-secondary btn-sm" onclick="confirmLogout()">登出</button>
+      </div>
       <button class="btn btn-secondary pub-login-btn" onclick="requireLogin('login')" id="loginTriggerBtn">
         🔐 登入
       </button>
@@ -192,7 +201,7 @@
     </div>
     <div class="sidebar-footer">
       <div class="nav-item" onclick="doLogout()"><span class="nav-icon">🏠</span>回首頁</div>
-      <div class="nav-item" onclick="doLogout()"><span class="nav-icon">🚪</span>登出</div>
+      <div class="nav-item" onclick="confirmLogout()"><span class="nav-icon">🚪</span>登出</div>
     </div>
   </nav>
 
@@ -214,10 +223,13 @@
             <button onclick="changeWeek(1)">›</button>
             <button onclick="goToday()" class="today-btn">今天</button>
           </div>
-          <div class="room-filter" id="roomFilter">
-            <div class="room-badge r0 active" data-room="0" onclick="toggleRoomFilter(0)">665 會議室</div>
-            <div class="room-badge r1 active" data-room="1" onclick="toggleRoomFilter(1)">663 訓練教室</div>
-            <div class="room-badge r2 active" data-room="2" onclick="toggleRoomFilter(2)">663 小會議室</div>
+          <div class="room-select-wrap">
+            <select id="appRoomSelect" onchange="onAppRoomSelect()" class="room-select">
+              <option value="all">📋 所有會議室</option>
+              <option value="0">🔵 665 會議室</option>
+              <option value="1">🟣 663 訓練教室</option>
+              <option value="2">🟢 663 小會議室</option>
+            </select>
           </div>
         </div>
         <div id="calLoading" class="loading-bar hidden"></div>
