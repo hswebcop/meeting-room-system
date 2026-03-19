@@ -818,28 +818,158 @@ function showEventDetail(bookingId) {
 }
 function openEditModal(bookingId) {
   const b = allBookings.find(x=>x.id===bookingId); if (!b) return;
-  if (currentUser.role!=='admin' && currentUser.id!==b.userId) { showToast('您沒有權限編輯此會議。','error'); return; }
+  if (currentUser.role!=='admin' && currentUser.id!==b.userId) {
+    showToast('您沒有權限編輯此會議。','error'); return;
+  }
   closeModal('eventModal');
+
+  // 填入目前的值
   document.getElementById('editBookingId').value = bookingId;
+  document.getElementById('editRoom').value      = b.roomIdx;
+  document.getElementById('editDate').value      = b.date;
   document.getElementById('editSubject').value   = b.subject;
-  document.getElementById('editDesc').value      = b.desc||'';
+  document.getElementById('editDesc').value      = b.desc || '';
   document.getElementById('editError').classList.add('hidden');
+  document.getElementById('editConflictHint').classList.add('hidden');
+
+  // 設定日期最小值
+  document.getElementById('editDate').min = formatDate(new Date());
+
+  // 建立時間選單並預選目前時段
+  buildEditStartOptions(b.roomIdx, b.date, b.id);
+  setTimeout(() => {
+    document.getElementById('editStartTime').value = b.startSlot;
+    buildEditEndOptions(b.roomIdx, b.date, b.startSlot, b.id);
+    setTimeout(() => {
+      document.getElementById('editEndTime').value = b.endSlot;
+    }, 50);
+  }, 50);
+
   document.getElementById('editModal').classList.remove('hidden');
 }
-async function saveEditBooking() {
+
+/* 編輯 modal 的時間選單 helpers
+   排除「自己」這筆預定的時段（否則自己的時段會被判定為衝突）*/
+function buildEditStartOptions(roomIdx, date, excludeId) {
+  const today  = formatDate(new Date());
+  const ranges = allBookings.filter(b => b.roomIdx===roomIdx && b.date===date && b.id!==excludeId);
+  const nowSlot = today===date ? getNowSlot() : -1;
+  const sel = document.getElementById('editStartTime');
+  sel.innerHTML = '<option value="">-- 選擇開始時間 --</option>';
+  for (let s=0; s<SLOT_COUNT; s++) {
+    if (s<=nowSlot && date<=today) continue;
+    if (ranges.some(b => s>=b.startSlot && s<b.endSlot)) continue;
+    sel.innerHTML += `<option value="${s}">${slotToTime(s)}</option>`;
+  }
+}
+
+function buildEditEndOptions(roomIdx, date, startSlot, excludeId) {
+  const ranges = allBookings.filter(b => b.roomIdx===roomIdx && b.date===date && b.id!==excludeId);
+  const sel = document.getElementById('editEndTime');
+  sel.innerHTML = '<option value="">-- 選擇結束時間 --</option>';
+  for (let s=startSlot+1; s<=SLOT_COUNT; s++) {
+    if (ranges.some(b => !(s<=b.startSlot || startSlot>=b.endSlot))) break;
+    sel.innerHTML += `<option value="${s}">${slotToTime(s)}</option>`;
+  }
+}
+
+function onEditRoomOrDateChange() {
   const id      = parseInt(document.getElementById('editBookingId').value);
-  const subject = document.getElementById('editSubject').value.trim();
-  const desc    = document.getElementById('editDesc').value.trim();
-  const errEl   = document.getElementById('editError');
-  if (!subject) { showAlert(errEl,'請輸入會議主旨。'); return; }
+  const roomIdx = parseInt(document.getElementById('editRoom').value);
+  const date    = document.getElementById('editDate').value;
+  if (!date) return;
+  buildEditStartOptions(roomIdx, date, id);
+  document.getElementById('editEndTime').innerHTML = '<option value="">-- 先選開始時間 --</option>';
+  document.getElementById('editConflictHint').classList.add('hidden');
+}
+
+function onEditStartTimeChange() {
+  const id       = parseInt(document.getElementById('editBookingId').value);
+  const roomIdx  = parseInt(document.getElementById('editRoom').value);
+  const date     = document.getElementById('editDate').value;
+  const startVal = document.getElementById('editStartTime').value;
+  if (!date || startVal==='') return;
+  buildEditEndOptions(roomIdx, date, parseInt(startVal), id);
+  document.getElementById('editEndTime').value = '';
+  document.getElementById('editConflictHint').classList.add('hidden');
+}
+
+function onEditEndTimeChange() {
+  const id       = parseInt(document.getElementById('editBookingId').value);
+  const roomIdx  = parseInt(document.getElementById('editRoom').value);
+  const date     = document.getElementById('editDate').value;
+  const startVal = document.getElementById('editStartTime').value;
+  const endVal   = document.getElementById('editEndTime').value;
+  const hintEl   = document.getElementById('editConflictHint');
+  if (!date || startVal==='' || endVal==='') { hintEl.classList.add('hidden'); return; }
+
+  // 衝突檢查（排除自己）
+  const conflicts = allBookings.filter(b =>
+    b.roomIdx===roomIdx && b.date===date && b.id!==id &&
+    !(parseInt(endVal)<=b.startSlot || parseInt(startVal)>=b.endSlot)
+  );
+  if (conflicts.length > 0) {
+    hintEl.innerHTML = conflicts.map(c => {
+      const u = getUser(c.userId);
+      return `⚠️ <strong>${slotToTime(c.startSlot)}–${slotToTime(c.endSlot)}</strong> 已由 <strong>${u?.cname||u?.name||c.userId}</strong> 預定「${c.subject}」`;
+    }).join('<br>');
+    hintEl.classList.remove('hidden');
+  } else {
+    hintEl.classList.add('hidden');
+  }
+}
+
+async function saveEditBooking() {
+  const id       = parseInt(document.getElementById('editBookingId').value);
+  const roomIdx  = parseInt(document.getElementById('editRoom').value);
+  const date     = document.getElementById('editDate').value;
+  const startVal = document.getElementById('editStartTime').value;
+  const endVal   = document.getElementById('editEndTime').value;
+  const subject  = document.getElementById('editSubject').value.trim();
+  const desc     = document.getElementById('editDesc').value.trim();
+  const errEl    = document.getElementById('editError');
+  errEl.classList.add('hidden');
+
+  if (!date)       { showAlert(errEl,'請選擇日期。');       return; }
+  if (startVal==='') { showAlert(errEl,'請選擇開始時間。'); return; }
+  if (endVal==='')   { showAlert(errEl,'請選擇結束時間。'); return; }
+  if (!subject)    { showAlert(errEl,'請輸入會議主旨。');   return; }
+
+  const startSlot = parseInt(startVal);
+  const endSlot   = parseInt(endVal);
+
+  // 衝突檢查（排除自己）
+  const conflicts = allBookings.filter(b =>
+    b.roomIdx===roomIdx && b.date===date && b.id!==id &&
+    !(endSlot<=b.startSlot || startSlot>=b.endSlot)
+  );
+  if (conflicts.length > 0) {
+    const lines = conflicts.map(c => {
+      const cu = getUser(c.userId);
+      return `• ${slotToTime(c.startSlot)}–${slotToTime(c.endSlot)}　${cu?.cname||cu?.name||c.userId}：${c.subject}`;
+    }).join('<br>');
+    showAlert(errEl, `⚠️ 時段衝突，無法儲存！<br><br>${lines}<br><br>請重新選擇時段。`);
+    return;
+  }
+
   const btn = document.getElementById('editSaveBtn');
   btn.innerHTML='<span class="spinner"></span>'; btn.disabled=true;
   try {
-    const res = await apiPost({ action:'updateBooking', id, subject, desc });
-    if (!res.success) { showAlert(errEl,res.message); return; }
-    closeModal('editModal'); await refreshData(); showToast('會議已更新。');
+    const res = await apiPost({ action:'updateBooking', id, roomIdx, date, startSlot, endSlot, subject, desc });
+    if (!res.success) {
+      if (res.conflict) {
+        showAlert(errEl, `⚠️ 時段剛被他人搶先預定，請重新選擇。`);
+        await refreshData();
+      } else {
+        showAlert(errEl, res.message);
+      }
+      return;
+    }
+    closeModal('editModal');
+    await refreshData();
+    showToast('會議已更新。');
   } catch(e) { showAlert(errEl,'更新失敗：'+e.message); }
-  finally { btn.innerHTML='儲存'; btn.disabled=false; }
+  finally { btn.innerHTML='儲存變更'; btn.disabled=false; }
 }
 async function deleteBooking(bookingId) {
   const b = allBookings.find(x=>x.id===bookingId); if (!b) return;
