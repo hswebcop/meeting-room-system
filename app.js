@@ -13,7 +13,7 @@
      所有裝置（電腦、手機）都會自動使用，
      不需要每台裝置個別設定。
 ────────────────────────────────────────── */
-const HARDCODED_API_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
 
 // localStorage 可覆寫（供管理員臨時切換環境用），
 // 否則直接用上方寫死的網址。
