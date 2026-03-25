@@ -13,7 +13,7 @@
      所有裝置（電腦、手機）都會自動使用，
      不需要每台裝置個別設定。
 ────────────────────────────────────────── */
-const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
+const HARDCODED_API_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
 
 // localStorage 可覆寫（供管理員臨時切換環境用），
 // 否則直接用上方寫死的網址。
@@ -455,12 +455,20 @@ function populateBookingUserSelect() {
   const sel = document.getElementById('bookUser');
   const val = sel.value;
   sel.innerHTML = '<option value="">-- 選擇預定人 --</option>';
-  allUsers.filter(u => u.role !== 'admin').forEach(u => {
+  // 列出所有使用者（包含管理員本人）
+  allUsers.forEach(u => {
     const display = u.cname ? `${u.cname} (${u.id})` : `${u.name} (${u.id})`;
     sel.innerHTML += `<option value="${u.id}">${display}</option>`;
   });
-  if (currentUser.role !== 'admin') { sel.value = currentUser.id; sel.disabled = true; }
-  else { sel.disabled = false; sel.value = val || ''; }
+  if (currentUser.role !== 'admin') {
+    // 一般使用者：固定為自己，不可更改
+    sel.value = currentUser.id;
+    sel.disabled = true;
+  } else {
+    // 管理員：可選任何人，預設選自己
+    sel.disabled = false;
+    sel.value = val || currentUser.id;
+  }
 }
 
 /* ──────────────────────────────────────────
@@ -733,7 +741,7 @@ function renderBookedList(roomIdx, date) {
 }
 
 function resetBookForm() {
-  if (currentUser?.role!=='admin') document.getElementById('bookUser').value = currentUser?.id||'';
+  document.getElementById('bookUser').value    = currentUser?.id || '';
   document.getElementById('bookRoom').value    = '';
   document.getElementById('bookDate').value    = formatDate(new Date());
   document.getElementById('bookSubject').value = '';
