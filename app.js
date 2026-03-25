@@ -15,10 +15,10 @@
 ────────────────────────────────────────── */
 const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
 
-// localStorage 可覆寫（供管理員臨時切換環境用），
-// 否則直接用上方寫死的網址。
+// 固定使用寫死的網址，清除可能殘留的舊 localStorage 設定
 const CONFIG_KEY = 'meeting_system_api_url';
-let API_URL = localStorage.getItem(CONFIG_KEY) || HARDCODED_API_URL;
+localStorage.removeItem(CONFIG_KEY); // 清除舊設定，避免干擾
+let API_URL = HARDCODED_API_URL;
 
 const ROOMS       = ['665 會議室', '663 訓練教室', '663 小會議室'];
 const ROOM_COLORS = ['r0', 'r1', 'r2'];
@@ -120,8 +120,7 @@ function showSetupGuide() {
 async function saveApiUrl() {
   const url = document.getElementById('apiUrlInput').value.trim();
   if (!url) { showToast('請輸入 API 網址', 'error'); return; }
-  API_URL = url;
-  localStorage.setItem(CONFIG_KEY, url);
+  API_URL = url; // 只更新記憶體中的變數，不存 localStorage
   const btn = document.querySelector('#setupModal .btn-primary');
   btn.innerHTML = '<span class="spinner"></span> 測試連線...'; btn.disabled = true;
   try {
