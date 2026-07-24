@@ -10,10 +10,10 @@
 /* ──────────────────────────────────────────
    CONFIG
 ────────────────────────────────────────── */
-const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
+const HARDCODED_API_URL = 'https://script.google.com/macros/s/AKfycbzPt8SrjnwqD7PLYehNzYE9ei7BtAO88-_r6diRnYm1P8qKc_KraVT9tbjX7rdx7A0V/exec';
 
 // 固定使用寫死的網址，清除可能殘留的舊 localStorage 設定
-const CONFIG_KEY = 'https://script.google.com/macros/s/AKfycbwlRuzsvo2J7fVniGLf6sTIaNfTZ5yD-NE_g9AoK0rBbvjypVBn8MZuwRbA-YZ-K9I9/exec';
+const CONFIG_KEY = 'https://script.google.com/macros/s/AKfycbzPt8SrjnwqD7PLYehNzYE9ei7BtAO88-_r6diRnYm1P8qKc_KraVT9tbjX7rdx7A0V/exec';
 localStorage.removeItem(CONFIG_KEY);
 let API_URL = HARDCODED_API_URL;
 
